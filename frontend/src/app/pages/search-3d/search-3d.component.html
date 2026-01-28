@@ -1,0 +1,356 @@
+<div class="search-3d-container">
+  <div class="header">
+    <h2>Recherche par le Contenu 3D</h2>
+    <p>Indexation et recherche dans la base de modèles 3D </p>
+  </div>
+
+  <!-- Message d'erreur -->
+  <div *ngIf="apiError" class="alert alert-danger">
+    <i class="fas fa-exclamation-triangle"></i> {{apiError}}
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h5>Charger un modèle 3D</h5>
+        </div>
+        <div class="card-body">
+          <div class="upload-zone" (click)="fileInput.click()">
+            <input type="file" #fileInput (change)="onFileSelected($event)" accept=".obj,.stl,.ply,.gltf,.glb" style="display: none">
+            <div *ngIf="!selectedFile" class="upload-placeholder">
+              <i class="fas fa-file-upload fa-3x"></i>
+              <p>Cliquez pour sélectionner un fichier 3D</p>
+              <small class="text-muted">Formats acceptés: .obj, .stl, .ply, .gltf, .glb</small>
+            </div>
+            <div *ngIf="selectedFile" class="file-info">
+              <i class="fas fa-cube fa-2x"></i>
+              <div>
+                <p class="filename">{{selectedFile.name}}</p>
+                <p class="filesize">Taille: {{selectedFile.size | number}} octets</p>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary mt-3 w-100" [disabled]="!selectedFile || loading" (click)="launchSearch()">
+            <span *ngIf="loading" class="spinner-border spinner-border-sm me-2"></span>
+            {{loading ? 'Recherche en cours...' : 'Lancer la recherche'}}
+          </button>
+          
+          
+        </div>
+      </div>
+    </div>
+
+    
+
+  <!-- Résultats de recherche -->
+  <!-- Dans search-3d.component.html -->
+<div class="results-container" *ngIf="results.length > 0">
+  <div class="result-card" *ngFor="let model of results">
+    <div class="result-thumbnail-container">
+      <div class="thumbnail-wrapper">
+        <img 
+          [src]="model.thumbnail" 
+          [alt]="model.name"
+          (error)="onImageError($event, model)"
+          class="model-thumbnail"
+          loading="lazy"
+        />
+        <div class="similarity-badge" [class]="getSimilarityClass(model.similarity)">
+          {{ model.similarity.toFixed(2) }}%
+        </div>
+      </div>
+    </div>
+    
+    <div class="result-details">
+      <h3 class="model-name">{{ model.name }}</h3>
+      
+      <div class="model-class">
+        <i [class]="getClassIcon(model.class)" class="fas class-icon"></i>
+        <span class="class-name">{{ model.class }}</span>
+      </div>
+      
+      
+      <div class="result-actions">
+        <button (click)="viewModel(model)" class="btn btn-view">
+          <i class="fas fa-eye"></i> Visualiser 3D
+        </button>
+        <button (click)="downloadModel(model)" class="btn btn-download">
+          <i class="fas fa-download"></i> Télécharger
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- Visualiseur 3D -->
+  <div class="modal-backdrop" *ngIf="modelViewerVisible" (click)="closeModelViewer()"></div>
+  <div class="model-viewer" *ngIf="modelViewerVisible">
+    <div class="model-viewer-header">
+      <h5>
+        <i class="fas fa-cube me-2"></i>
+        Visualisation 3D: {{selectedModel?.name}}
+      </h5>
+      <div>
+        <button class="btn btn-sm btn-outline-secondary me-2" (click)="resetView()" *ngIf="isModelLoaded">
+          <i class="fas fa-sync-alt"></i> Réinitialiser vue
+        </button>
+        <button class="btn btn-sm btn-outline-info me-2" (click)="toggleWireframe()" *ngIf="isModelLoaded">
+          <i class="fas fa-th"></i> Fil de fer
+        </button>
+        <button class="btn btn-sm btn-danger" (click)="closeModelViewer()">
+          <i class="fas fa-times"></i> Fermer
+        </button>
+      </div>
+    </div>
+    <div class="model-viewer-body">
+      <div class="row">
+        <div class="col-md-8">
+          <!-- Canvas Three.js -->
+          <div class="model-canvas-container">
+            <canvas #modelCanvas class="model-canvas"></canvas>
+            <div class="canvas-overlay" *ngIf="!isModelLoaded">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Chargement...</span>
+              </div>
+              <p class="mt-2">Chargement du modèle 3D...</p>
+            </div>
+          </div>
+          
+          <div class="controls-info mt-3">
+            <small class="text-muted">
+              <i class="fas fa-mouse-pointer"></i> Faites glisser pour tourner • 
+              <i class="fas fa-mouse"></i> Molette pour zoomer • 
+              <i class="fas fa-arrows-alt"></i> Clic droit pour déplacer
+            </small>
+          </div>
+          
+          <!-- Panneau de contrôle d'affichage -->
+          <div class="display-controls-panel mt-3">
+            <div class="card settings-card">
+              <div class="card-header" (click)="toggleSettingsPanel()">
+                <h6 class="mb-0">
+                  <i class="fas fa-sliders-h"></i> Paramètres d'affichage
+                  <span class="float-right">
+                    <i class="fas" [ngClass]="showSettingsPanel ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </span>
+                </h6>
+              </div>
+              
+              <div class="card-body" *ngIf="showSettingsPanel">
+                <!-- Mode d'affichage -->
+                <div class="control-group">
+                  <label>Mode d'affichage:</label>
+                  <div class="btn-group btn-group-sm d-flex">
+                    <button class="btn btn-outline-primary flex-fill" 
+                            [class.active]="!wireframeMode"
+                            (click)="toggleWireframeMode()">
+                      <i class="fas fa-square"></i> Surface
+                    </button>
+                    <button class="btn btn-outline-primary flex-fill"
+                            [class.active]="wireframeMode"
+                            (click)="toggleWireframeMode()">
+                      <i class="fas fa-border-style"></i> Fil de fer
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Qualité du maillage -->
+                <div class="control-group">
+                  <label>Résolution du maillage:</label>
+                  <input type="range" class="form-control-range" 
+                         min="0.5" max="2.0" step="0.1"
+                         [(ngModel)]="meshQuality"
+                         (change)="adjustMeshQuality(meshQuality)">
+                  <small class="text-muted">Qualité: {{ meshQuality }}x</small>
+                </div>
+                
+                <!-- Couleurs -->
+                <div class="control-group">
+                  <label>Couleur du modèle:</label>
+                  <div class="color-palette">
+                    <div *ngFor="let color of colorPalettes" 
+                         class="color-swatch"
+                         [style.background-color]="color.value"
+                         [class.active]="currentColor === color.value"
+                         (click)="applyColorPalette(color)"
+                         [title]="color.name">
+                      <span class="color-name">{{ color.name }}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Options d'affichage -->
+                <div class="control-group">
+                  <label>Options:</label>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" 
+                           [(ngModel)]="showGrid"
+                           (change)="toggleGrid()"
+                           id="showGrid">
+                    <label class="form-check-label" for="showGrid">
+                      Afficher la grille
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" 
+                           [(ngModel)]="showAxes"
+                           (change)="toggleAxes()"
+                           id="showAxes">
+                    <label class="form-check-label" for="showAxes">
+                      Afficher les axes
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" 
+                           [(ngModel)]="showSurface"
+                           (change)="toggleSurface()"
+                           id="showSurface">
+                    <label class="form-check-label" for="showSurface">
+                      Afficher la surface
+                    </label>
+                  </div>
+                </div>
+                
+                <!-- Vitesses de navigation -->
+                <div class="control-group">
+                  <label>Vitesse de navigation:</label>
+                  <div class="speed-controls">
+                    <div class="speed-control">
+                      <small>Caméra: {{ cameraSpeed }}x</small>
+                      <input type="range" class="form-control-range" 
+                             min="0.1" max="3.0" step="0.1"
+                             [(ngModel)]="cameraSpeed"
+                             (change)="setCameraSpeed(cameraSpeed)">
+                    </div>
+                    <div class="speed-control">
+                      <small>Zoom: {{ zoomSpeed }}x</small>
+                      <input type="range" class="form-control-range" 
+                             min="0.1" max="3.0" step="0.1"
+                             [(ngModel)]="zoomSpeed"
+                             (change)="setZoomSpeed(zoomSpeed)">
+                    </div>
+                    <div class="speed-control">
+                      <small>Rotation: {{ rotationSpeed }}x</small>
+                      <input type="range" class="form-control-range" 
+                             min="0.1" max="3.0" step="0.1"
+                             [(ngModel)]="rotationSpeed"
+                             (change)="setRotationSpeed(rotationSpeed)">
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Gestion des paramètres -->
+                <div class="control-group">
+                  <label>Gestion des paramètres:</label>
+                  <div class="btn-group btn-group-sm d-flex mt-2">
+                    <button class="btn btn-outline-success flex-fill" 
+                            (click)="saveDisplaySettings()">
+                      <i class="fas fa-save"></i> Sauvegarder
+                    </button>
+                    <button class="btn btn-outline-primary flex-fill" 
+                            (click)="loadDisplaySettings()">
+                      <i class="fas fa-folder-open"></i> Charger
+                    </button>
+                  </div>
+                  <div class="btn-group btn-group-sm d-flex mt-1">
+                    <button class="btn btn-outline-info flex-fill" 
+                            (click)="exportDisplaySettings()">
+                      <i class="fas fa-download"></i> Exporter
+                    </button>
+                    <label class="btn btn-outline-warning flex-fill mb-0">
+                      <i class="fas fa-upload"></i> Importer
+                      <input type="file" accept=".json" 
+                             (change)="importDisplaySettings($event)" 
+                             style="display: none;">
+                    </label>
+                  </div>
+                  <button class="btn btn-outline-danger btn-sm btn-block mt-1" 
+                          (click)="resetDisplaySettings()">
+                    <i class="fas fa-undo"></i> Réinitialiser
+                  </button>
+                </div>
+                
+                <!-- Raccourcis clavier -->
+                <div class="control-group mt-3">
+                  <small class="text-muted">
+                    <i class="fas fa-keyboard"></i> Raccourcis clavier:<br>
+                    • Flèches: Rotation<br>
+                    • +/-: Zoom<br>
+                    • W: Fil de fer<br>
+                    • G: Grille<br>
+                    • A: Axes<br>
+                    • R: Réinitialiser vue<br>
+                    • S: Sauvegarder paramètres<br>
+                    • L: Charger paramètres
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="col-md-4">
+          <div class="model-info-card">
+            <h6>Informations du modèle</h6>
+            <div class="info-item">
+              <strong>Nom:</strong>
+              <p>{{selectedModel?.name}}</p>
+            </div>
+            <div class="info-item">
+              <strong>Classe:</strong>
+              <p><span class="badge bg-info">{{selectedModel?.class}}</span></p>
+            </div>
+            <div class="info-item">
+              <strong>Similarité:</strong>
+              <p>
+                <span class="similarity-display" [ngClass]="getSimilarityClass(selectedModel?.similarity)">
+                  {{selectedModel?.similarity | percent:'1.2-2'}}
+                </span>
+              </p>
+            </div>
+            <div class="info-item">
+              <strong>Rang:</strong>
+              <p>#{{selectedModel?.rank}}</p>
+            </div>
+            
+            <div class="info-item">
+              <strong>Surface:</strong>
+              <p>{{selectedModel?.metadata?.area | number:'1.2-2'}}</p>
+            </div>
+            <div class="info-item">
+              <strong>Volume:</strong>
+              <p>{{selectedModel?.metadata?.volume | number:'1.2-2'}}</p>
+            </div>
+            
+            <div class="color-picker mt-3" *ngIf="isModelLoaded">
+              <strong>Couleur du modèle:</strong>
+              <div class="color-options">
+                <div *ngFor="let color of colorPalettes" 
+                     class="color-option" 
+                     [style.background-color]="color.value"
+                     [class.active]="currentColor === color.value"
+                     (click)="changeModelColor(color.value)"
+                     [title]="color.name"></div>
+              </div>
+            </div>
+            
+            <div class="mt-4">
+              <button class="btn btn-primary w-100 mb-2" (click)="downloadModel(selectedModel)">
+                <i class="fas fa-download"></i> Télécharger le modèle
+              </button>
+              <button class="btn btn-outline-secondary w-100" (click)="closeModelViewer()">
+                <i class="fas fa-times"></i> Fermer la visualisation
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message si aucun résultat -->
+  <div *ngIf="!loading && results.length === 0 && queryDescriptor" class="alert alert-info mt-4">
+    <i class="fas fa-info-circle"></i> Aucun résultat trouvé pour cette recherche.
+  </div>
+</div>

@@ -1,0 +1,27 @@
+{
+  "total_objects": 3748,
+  "unique_images": 739,
+  "unique_classes": 15,
+  "class_distribution": {
+    "bird": 624,
+    "car": 428,
+    "horse": 328,
+    "dog": 300,
+    "banana": 260,
+    "elephant": 252,
+    "laptop": 236,
+    "cup": 232,
+    "apple": 200,
+    "cow": 192,
+    "motorcycle": 180,
+    "bus": 156,
+    "bottle": 152,
+    "person": 108,
+    "bicycle": 100
+  },
+  "generated_at": "2025-12-28T14:01:35.525028",
+  "database": "image_search_db",
+  "collection": "objects",
+  "format_version": "1.0",
+  "shape_normalization": "log_transform + L2"
+}

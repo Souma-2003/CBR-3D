@@ -1,0 +1,334 @@
+<div class="dashboard-container">
+  <!-- En-tête -->
+  <div class="header">
+    <h1><i class="fas fa-chart-bar"></i> Tableau de bord - Analyse d'Images</h1>
+    <p>Analyse et visualisation des descripteurs d'images</p>
+  </div>
+
+  <!-- Statistiques globales -->
+  <div class="stats-cards">
+    <div class="stat-card">
+      <div class="stat-icon">
+        <i class="fas fa-images"></i>
+      </div>
+      <div class="stat-content">
+        <h3>{{ stats.totalImages }}</h3>
+        <p>Images totales</p>
+      </div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="stat-icon">
+        <i class="fas fa-chart-line"></i>
+      </div>
+      <div class="stat-content">
+        <h3>{{ stats.imagesAnalyzed }}</h3>
+        <p>Images analysées</p>
+      </div>
+    </div>
+    
+    <div class="stat-card">
+      <div class="stat-icon">
+        <i class="fas fa-calendar-alt"></i>
+      </div>
+      <div class="stat-content">
+        <h3>{{ stats.lastAnalysis ? formatDate(stats.lastAnalysis) : 'Jamais' }}</h3>
+        <p>Dernière analyse</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section Upload -->
+  <div class="upload-section">
+    <div class="section-header">
+      <h2><i class="fas fa-cloud-upload-alt"></i> Upload d'image</h2>
+    </div>
+    
+    <div class="upload-area">
+      <div class="upload-content">
+        <i class="fas fa-file-upload"></i>
+        <p>Glissez-déposez une image ici ou</p>
+        <input type="file" #fileInput (change)="onFileSelected($event)" accept="image/*" hidden>
+        <button class="btn btn-primary" (click)="fileInput.click()">
+          <i class="fas fa-folder-open"></i> Parcourir
+        </button>
+        <small>Formats supportés: JPG, PNG, GIF, BMP, TIFF, WebP (max 10MB)</small>
+      </div>
+    </div>
+    
+    <!-- Fichier sélectionné -->
+    <div *ngIf="selectedFile" class="selected-file">
+      <div class="file-info">
+        <i class="fas fa-file-image"></i>
+        <div class="file-details">
+          <strong>{{ selectedFile.name }}</strong>
+          <span>{{ formatFileSize(selectedFile.size) }}</span>
+        </div>
+      </div>
+      <div class="file-actions">
+        <button class="btn btn-success" (click)="uploadImage()" [disabled]="isUploading">
+          <i *ngIf="!isUploading" class="fas fa-upload"></i>
+          <i *ngIf="isUploading" class="fas fa-spinner fa-spin"></i>
+          {{ isUploading ? 'Upload en cours...' : 'Uploader' }}
+        </button>
+        <button class="btn btn-secondary" (click)="selectedFile = null">
+          <i class="fas fa-times"></i> Annuler
+        </button>
+      </div>
+      
+      <!-- Barre de progression -->
+      <div *ngIf="isUploading" class="upload-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" [style.width]="uploadProgress + '%'"></div>
+        </div>
+        <span>{{ uploadProgress }}%</span>
+      </div>
+    </div>
+    
+    <!-- Message d'erreur upload -->
+    <div *ngIf="uploadError" class="error-message">
+      <i class="fas fa-exclamation-triangle"></i> {{ uploadError }}
+    </div>
+  </div>
+
+  <!-- Galerie d'images -->
+  <div class="gallery-section">
+    <div class="section-header">
+      <h2><i class="fas fa-th"></i> Galerie d'images</h2>
+      <div class="gallery-controls">
+        <button class="btn btn-secondary" (click)="loadGallery()" [disabled]="isLoading">
+          <i *ngIf="!isLoading" class="fas fa-sync-alt"></i>
+          <i *ngIf="isLoading" class="fas fa-spinner fa-spin"></i>
+          {{ isLoading ? 'Chargement...' : 'Actualiser' }}
+        </button>
+      </div>
+    </div>
+    
+    <!-- Indicateur de chargement -->
+    <div *ngIf="isLoading && images.length === 0" class="loading-indicator">
+      <div class="spinner"></div>
+      <p>Chargement des images...</p>
+    </div>
+    
+    <!-- Message si pas d'images -->
+    <div *ngIf="!isLoading && images.length === 0" class="empty-gallery">
+      <i class="fas fa-images"></i>
+      <p>Aucune image disponible</p>
+      <p class="hint">Uploader une image pour commencer</p>
+    </div>
+    
+    <!-- Grille d'images -->
+    <div class="image-grid" *ngIf="images.length > 0">
+      <div *ngFor="let image of images" 
+           class="image-card" 
+           [class.selected]="selectedImage?.id === image.id"
+           (click)="selectImage(image)">
+        <div class="image-container">
+          <img [src]="image.url" [alt]="image.name" loading="lazy">
+          <div class="image-overlay">
+            <div class="image-badge" *ngIf="image.descriptors">
+              <i class="fas fa-chart-bar"></i> Analysée
+            </div>
+          </div>
+        </div>
+        <div class="image-info">
+          <h4>{{ image.name }}</h4>
+          <p>{{ formatDate(image.uploadDate) }}</p>
+          <div class="image-status" [class.analyzed]="image.descriptors">
+            {{ image.descriptors ? 'Analysée' : 'Non analysée' }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section d'analyse -->
+  <div *ngIf="selectedImage" class="analysis-section">
+    <div class="section-header">
+      <h3>
+        <i class="fas fa-chart-bar"></i>
+        Analyse de l'image
+        <span class="image-name">{{selectedImage.name}}</span>
+      </h3>
+    </div>
+    
+    <!-- Messages d'erreur -->
+    <div *ngIf="descriptorError" class="error-message">
+      <i class="fas fa-exclamation-triangle"></i>
+      {{descriptorError}}
+      
+      <!-- Conseils de dépannage -->
+      <div *ngIf="descriptorError?.includes('404')" class="troubleshooting">
+        <p><strong>Conseils de dépannage :</strong></p>
+        <ul>
+          <li>Vérifiez que l'image est bien uploadée sur le serveur</li>
+          <li>Essayez de re-uploader l'image</li>
+          <li>Vérifiez que le service backend est démarré</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Image sélectionnée -->
+    <div class="selected-image-preview">
+      <div class="image-wrapper">
+        <img [src]="selectedImage.url" [alt]="selectedImage.name">
+        <div class="image-meta">
+          <p><strong>Nom:</strong> {{selectedImage.name}}</p>
+          <p><strong>Date d'upload:</strong> {{formatDate(selectedImage.uploadDate)}}</p>
+          <p><strong>Statut:</strong> 
+            <span [class]="selectedImage.descriptors ? 'status-analyzed' : 'status-not-analyzed'">
+              {{selectedImage.descriptors ? 'Analysée' : 'Non analysée'}}
+            </span>
+          </p>
+        </div>
+      </div>
+      
+      <!-- Boutons d'action -->
+      <div class="action-buttons">
+        <button (click)="calculateImageDescriptors()" 
+                [disabled]="isCalculatingDescriptors || !selectedImage"
+                class="btn btn-primary">
+          <i *ngIf="!isCalculatingDescriptors" class="fas fa-play"></i>
+          <i *ngIf="isCalculatingDescriptors" class="fas fa-spinner fa-spin"></i>
+          {{isCalculatingDescriptors ? 'Calcul en cours...' : 'Analyser l\'image'}}
+        </button>
+        
+        <button *ngIf="imageDescriptors" 
+                (click)="downloadDescriptors()"
+                class="btn btn-secondary">
+          <i class="fas fa-download"></i>
+          Télécharger les descripteurs
+        </button>
+      </div>
+    </div>
+
+    <!-- Indicateur de chargement -->
+    <div *ngIf="isCalculatingDescriptors" class="loading-indicator">
+      <div class="spinner"></div>
+      <p>Calcul des descripteurs en cours...</p>
+    </div>
+
+    <!-- Message quand l'image n'est pas analysée -->
+    <div *ngIf="selectedImage && !hasBeenAnalyzed()" class="not-analyzed-message">
+      <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <h4>Image non analysée</h4>
+        <p>Cette image n'a pas encore été analysée. Cliquez sur "Analyser l'image" pour calculer ses descripteurs et afficher les visualisations.</p>
+      </div>
+    </div>
+
+    <!-- Visualisations des descripteurs -->
+    <div *ngIf="imageDescriptors" class="descriptors-section">
+      <!-- Contrôles de visualisation -->
+      <div class="visualization-controls">
+        <div class="toggle-buttons">
+          <button class="btn-toggle" [class.active]="showColorPalette" (click)="showColorPalette = !showColorPalette">
+            <i class="fas fa-palette"></i> Palette de couleurs
+          </button>
+          <button class="btn-toggle" [class.active]="showHistogram" (click)="showHistogram = !showHistogram">
+            <i class="fas fa-chart-bar"></i> Histogramme
+          </button>
+          <button class="btn-toggle" [class.active]="showTextureFeatures" (click)="showTextureFeatures = !showTextureFeatures">
+            <i class="fas fa-texture"></i> Texture
+          </button>
+          <button class="btn-toggle" [class.active]="showShapeFeatures" (click)="showShapeFeatures = !showShapeFeatures">
+            <i class="fas fa-shapes"></i> Forme
+          </button>
+          <button class="btn-toggle" [class.active]="showStatistics" (click)="showStatistics = !showStatistics">
+            <i class="fas fa-chart-pie"></i> Statistiques
+          </button>
+        </div>
+      </div>
+
+      <!-- Palette de couleurs - Affichage de 3 couleurs seulement -->
+<div *ngIf="showColorPalette && hasBeenAnalyzed() && hasColorFeatures()" class="section">
+  <h3>Palette de couleurs (3 couleurs dominantes)</h3>
+  <div class="color-palette">
+    <div *ngFor="let color of getDominantColors(); let i = index" 
+         class="color-item" 
+         [style.backgroundColor]="color"
+         [title]="color">
+      <span class="color-hex">{{color}}</span>
+    </div>
+  </div>
+ 
+</div>
+
+      <!-- Histogramme -->
+      <div *ngIf="showHistogram && hasColorFeatures()" class="section">
+        <h3>Histogramme des couleurs</h3>
+        <div class="histogram-controls">
+          <button (click)="histogramType = 'rgb'; updateCharts()" [class.active]="histogramType === 'rgb'">RGB</button>
+          <button (click)="histogramType = 'hsv'; updateCharts()" [class.active]="histogramType === 'hsv'">HSV</button>
+          <div class="bins-control">
+            <label>Bins:</label>
+            <select [(ngModel)]="histogramBins" (change)="updateCharts()">
+              <option [value]="8" [selected]="histogramBins === 8">8</option>
+              <option [value]="16">16</option>
+              <option [value]="32">32</option>
+            </select>
+          </div>
+        </div>
+        
+        <div *ngIf="histogramType === 'rgb'" class="histogram-visualization">
+          <h4>Visualisation de l'histogramme RGB</h4>
+          <div class="chart-container">
+            <canvas #rgbHistogramCanvas width="800" height="300"></canvas>
+          </div>
+          
+        </div>
+        
+        <div *ngIf="histogramType === 'hsv'" class="histogram-visualization">
+          <h4>Visualisation de l'histogramme HSV</h4>
+          <div class="chart-container">
+            <canvas #hsvHistogramCanvas width="800" height="300"></canvas>
+          </div>
+          <div class="data-info">
+            Données disponibles: {{getHSVHistogramData().length}} points
+          </div>
+        </div>
+      </div>
+
+      <!-- Statistiques -->
+      <div *ngIf="showStatistics" class="visualization-card">
+        <h4><i class="fas fa-chart-pie"></i> Statistiques des descripteurs</h4>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-label">Caractéristiques couleur</div>
+            <div class="stat-value">{{getColorFeatureCount()}}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Caractéristiques texture</div>
+            <div class="stat-value">{{getTextureFeatureCount()}}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Caractéristiques forme</div>
+            <div class="stat-value">{{getShapeFeatureCount()}}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">Dimensions du vecteur</div>
+            <div class="stat-value">{{getCombinedVectorLength()}}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Détails des descripteurs (section pliable) -->
+      <div class="details-section">
+        <details>
+          <summary>
+            <i class="fas fa-code"></i> Détails techniques des descripteurs
+          </summary>
+          <div class="details-content">
+            <pre>{{imageDescriptors | json}}</pre>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>© 2024 Système d'analyse d'images - Tous droits réservés</p>
+    <p class="version">Version 1.0.0</p>
+  </div>
+</div>

@@ -1,0 +1,30 @@
+<div class="image-card">
+  <div class="image-container">
+    <img [src]="image.url" [alt]="image.filename" (error)="onImageError($event)">
+    <div *ngIf="similarityScore > 0" class="similarity-badge">
+      {{ (similarityScore * 100).toFixed(1) }}%
+    </div>
+  </div>
+  
+  <div class="image-info">
+    <h4 class="image-title">{{ image.filename }}</h4>
+    <p class="image-meta">
+      <i class="fas fa-calendar"></i> {{ formatDate(image.uploadDate) }}
+      <span *ngIf="image.metadata && image.metadata.width && image.metadata.height">
+        | <i class="fas fa-expand"></i> {{ image.metadata.width }}×{{ image.metadata.height }}
+      </span>
+    </p>
+  </div>
+  
+  <div *ngIf="showActions" class="image-actions">
+    <button class="btn btn-sm btn-primary" (click)="onView()">
+      <i class="fas fa-eye"></i> View
+    </button>
+    <button class="btn btn-sm btn-success" (click)="onSearch()">
+      <i class="fas fa-search"></i> Search
+    </button>
+    <button class="btn btn-sm btn-danger" (click)="onDelete()">
+      <i class="fas fa-trash"></i>
+    </button>
+  </div>
+</div>

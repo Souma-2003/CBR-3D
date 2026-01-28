@@ -1,0 +1,12 @@
+{
+  "num_sample_points": 2000,
+  "num_keypoints": 500,
+  "curvature_bins": 64,
+  "shape_index_bins": 64,
+  "signature_radius": 0.05,
+  "spin_image_bins": [10, 10],
+  "spin_image_radius": 0.1,
+  "shape_context_bins": [5, 12, 5],
+  "normalize_scale": true,
+  "k_neighbors": 15
+}

@@ -1,0 +1,42 @@
+<div class="detected-objects-container">
+  <div *ngIf="loading" class="loading-objects">
+    <div class="loading-spinner"></div>
+    <p>Chargement des objets détectés...</p>
+  </div>
+
+  <div *ngIf="!loading && objects.length === 0" class="no-objects">
+    <i class="fas fa-search"></i>
+    <h3>Aucun objet détecté</h3>
+    <p>Aucun objet n'a été trouvé dans l'image.</p>
+  </div>
+
+  <div *ngIf="!loading && objects.length > 0" class="objects-grid">
+    <div *ngFor="let object of objects" class="object-card">
+      <div class="object-header">
+        <span class="object-name">{{ object.class_name }}</span>
+        <span class="object-confidence">{{ (object.confidence * 100).toFixed(1) }}%</span>
+      </div>
+      
+      <div class="object-details">
+        <div class="detail-row">
+          <span class="detail-label">Position:</span>
+          <span class="detail-value">
+            X:{{ object.bbox?.x1 | number:'1.0-0' }}, Y:{{ object.bbox?.y1 | number:'1.0-0' }}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Dimensions:</span>
+          <span class="detail-value">
+            {{ object.bbox?.width | number:'1.0-0' }}×{{ object.bbox?.height | number:'1.0-0' }}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Zone:</span>
+          <span class="detail-value">
+            {{ (object.bbox?.width * object.bbox?.height) | number:'1.0-0' }} px²
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

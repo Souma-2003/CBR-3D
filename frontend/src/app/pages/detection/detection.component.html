@@ -1,0 +1,990 @@
+<div class="detection-page">
+  <!-- En-tête de page -->
+  <div class="page-header">
+    <h1>
+      <i class="fas fa-robot"></i>
+      Détection d'Objets YOLO
+    </h1>
+    <p class="subtitle">Détectez et identifiez les objets dans vos images avec l'IA</p>
+    
+    <div class="api-status" [class.connected]="apiStatus.includes('✅')">
+      <i class="fas fa-plug"></i>
+      {{ apiStatus }}
+    </div>
+  </div>
+
+  <!-- Contenu principal -->
+  <div class="detection-content">
+    <!-- Section gauche : Upload et paramètres -->
+    <div class="left-column">
+      <!-- Carte d'upload -->
+      <div class="card upload-card">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-cloud-upload-alt"></i>
+            Charger des images
+          </h2>
+        </div>
+
+        <div class="card-body">
+          <!-- Sélection du mode -->
+          <div class="mode-selection">
+            <div class="mode-buttons">
+              <button class="btn btn-mode" 
+                      [class.active]="selectionMode === 'single'"
+                      (click)="setSelectionMode('single')">
+                <i class="fas fa-file-image"></i>
+                Image unique
+              </button>
+              <button class="btn btn-mode" 
+                      [class.active]="selectionMode === 'batch'"
+                      (click)="setSelectionMode('batch')">
+                <i class="fas fa-folder"></i>
+                Dossier d'images
+              </button>
+              <button class="btn btn-mode" 
+                      [class.active]="selectionMode === 'transform'"
+                      (click)="setSelectionMode('transform')">
+                <i class="fas fa-magic"></i>
+                Transformations
+              </button>
+            </div>
+          </div>
+
+          <!-- Zone de drag & drop -->
+          <div class="drop-zone" 
+               (dragover)="onDragOver($event)"
+               (drop)="onDrop($event)"
+               (click)="triggerFileInput()">
+            
+            <!-- Input pour image unique (caché) -->
+            <input #imageInput 
+                   type="file" 
+                   accept="image/*"
+                   (change)="onFileSelected($event)"
+                   class="file-input"
+                   style="display: none;">
+            
+            <!-- Input pour dossier (caché) -->
+            <input #folderInput 
+                   type="file" 
+                   accept="image/*"
+                   webkitdirectory 
+                   multiple
+                   (change)="onFolderSelected($event)"
+                   class="file-input"
+                   style="display: none;">
+            
+            <!-- Contenu de la zone de drop -->
+            <div class="drop-content" *ngIf="!originalImagePreview">
+              <div class="drop-icon">
+                <i class="fas fa-cloud-upload-alt fa-3x"></i>
+              </div>
+              <h3>
+                <span *ngIf="selectionMode === 'single'">Glissez votre image ici</span>
+                <span *ngIf="selectionMode === 'batch'">Glissez votre dossier d'images ici</span>
+                <span *ngIf="selectionMode === 'transform'">Glissez une image à transformer ici</span>
+              </h3>
+              <p>ou cliquez pour parcourir</p>
+              <small *ngIf="selectionMode === 'single'">Formats supportés: JPG, PNG, GIF, BMP (max 10MB)</small>
+              <small *ngIf="selectionMode === 'batch'">Formats supportés: JPG, PNG, GIF, BMP (max 100 images)</small>
+              <small *ngIf="selectionMode === 'transform'">Formats supportés: JPG, PNG, GIF, BMP, WEBP (max 10MB)</small>
+            </div>
+
+            <!-- Prévisualisation pour image unique -->
+            <div *ngIf="originalImagePreview && selectionMode === 'single'" class="image-preview">
+              <img [src]="originalImagePreview" alt="Preview">
+              <div class="preview-overlay">
+                <span class="file-name">{{ getSelectedFileName() }}</span>
+                <span class="file-size">{{ (getSelectedFileSize() || 0) / 1024 | number:'1.0-0' }} KB</span>
+              </div>
+            </div>
+
+            <!-- Prévisualisation pour dossier -->
+            <div *ngIf="selectionMode === 'batch' && selectedFiles.length > 0" class="folder-preview">
+              <div class="folder-header">
+                <i class="fas fa-folder-open fa-2x"></i>
+                <div class="folder-info">
+                  <h4>{{ selectedFiles.length }} image(s) sélectionnée(s)</h4>
+                  <p>Première image: {{ selectedFiles[0].name }}</p>
+                </div>
+              </div>
+              
+              <div class="folder-images">
+                <div class="image-thumbnails">
+                  <div *ngFor="let file of selectedFiles.slice(0, 4); let i = index" class="thumbnail">
+                    <img [src]="getObjectUrl(file)" alt="Thumbnail">
+                    <div class="thumbnail-overlay" *ngIf="i === 3 && selectedFiles.length > 4">
+                      +{{ selectedFiles.length - 4 }} plus
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Prévisualisation pour transformation -->
+            <div *ngIf="originalImagePreview && selectionMode === 'transform'" class="image-preview">
+              <img [src]="originalImagePreview" alt="Preview">
+              <div class="preview-overlay">
+                <span class="file-name">{{ getSelectedFileName() }}</span>
+                <span class="file-size">{{ (getSelectedFileSize() || 0) / 1024 | number:'1.0-0' }} KB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Informations de sélection -->
+          <div *ngIf="warningMessage" class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            {{ warningMessage }}
+          </div>
+
+          <div *ngIf="selectionMode === 'batch' && selectedFiles.length > 0" class="selection-info">
+            <div class="info-item">
+              <i class="fas fa-images"></i>
+              <span>{{ selectedFiles.length }} image(s) sélectionnée(s)</span>
+            </div>
+            <div class="info-item">
+              <i class="fas fa-hdd"></i>
+              <span>{{ getTotalSize() | number:'1.0-0' }} KB au total</span>
+            </div>
+          </div>
+
+          <!-- Boutons d'action -->
+          <div class="action-buttons">
+            <button class="btn btn-primary btn-detect" 
+                    (click)="detectObjects()"
+                    [disabled]="(!selectedFile && selectionMode === 'single') || (selectedFiles.length === 0 && selectionMode === 'batch') || isProcessing || isBatchProcessing">
+              <i class="fas fa-search" *ngIf="!isProcessing && !isBatchProcessing"></i>
+              <i class="fas fa-spinner fa-spin" *ngIf="isProcessing || isBatchProcessing"></i>
+              <span *ngIf="selectionMode === 'single'">
+                {{ isProcessing ? 'Analyse en cours...' : 'Détecter les objets' }}
+              </span>
+              <span *ngIf="selectionMode === 'batch'">
+                {{ isBatchProcessing ? 'Traitement du lot...' : 'Détecter le lot' }}
+              </span>
+              <span *ngIf="selectionMode === 'transform'">
+                {{ isProcessing ? 'Analyse en cours...' : 'Détecter les objets' }}
+              </span>
+            </button>
+            
+            <button class="btn btn-danger" 
+                    (click)="clearSelection()"
+                    [disabled]="!originalImagePreview && !detectionResults && selectedFiles.length === 0">
+              <i class="fas fa-trash"></i>
+              Tout effacer
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION TRANSFORMATIONS (visible seulement en mode transform) -->
+      <div *ngIf="isTransformMode()" class="transform-section">
+        <div class="card transform-card">
+          <div class="card-header">
+            <h2>
+              <i class="fas fa-sliders-h"></i>
+              Transformations d'image
+            </h2>
+          </div>
+
+          <div class="card-body">
+            <!-- Interface de transformation -->
+            <div *ngIf="originalImagePreview" class="transform-interface">
+              <div class="transform-preview">
+                <div class="preview-container">
+                  <canvas #transformCanvas class="transform-canvas"></canvas>
+                  <div class="preview-overlay">
+                    <span class="preview-label">Prévisualisation des transformations</span>
+                  </div>
+                </div>
+                
+                <div class="transform-actions">
+                  <button class="btn btn-primary" 
+                          (click)="applyTransformations()"
+                          [disabled]="isProcessingTransform()">
+                    <i class="fas fa-sync-alt" *ngIf="!isProcessingTransform()"></i>
+                    <i class="fas fa-spinner fa-spin" *ngIf="isProcessingTransform()"></i>
+                    {{ isProcessingTransform() ? 'Application...' : 'Appliquer les transformations' }}
+                  </button>
+                  
+                  <button class="btn btn-secondary" 
+                          (click)="resetTransformations()">
+                    <i class="fas fa-undo"></i>
+                    Réinitialiser
+                  </button>
+                  
+                  <button class="btn btn-success" 
+                          (click)="downloadTransformedImage()"
+                          [disabled]="!transformedImagePreview">
+                    <i class="fas fa-download"></i>
+                    Télécharger
+                  </button>
+                  
+                  <button class="btn btn-info" 
+                          (click)="useTransformedImage()"
+                          [disabled]="!transformedImagePreview">
+                    <i class="fas fa-search"></i>
+                    Utiliser pour détection
+                  </button>
+                </div>
+              </div>
+
+              <!-- Préréglages rapides -->
+              <div class="transform-presets">
+                <h4>
+                  <i class="fas fa-bolt"></i>
+                  Préréglages rapides
+                </h4>
+                <div class="preset-buttons">
+                  <button class="btn btn-preset" (click)="applyPreset('vintage')">
+                    <i class="fas fa-camera-retro"></i> Vintage
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('blackWhite')">
+                    <i class="fas fa-moon"></i> Noir & Blanc
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('enhance')">
+                    <i class="fas fa-sun"></i> Améliorer
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('soft')">
+                    <i class="fas fa-cloud"></i> Adoucir
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('invert')">
+                    <i class="fas fa-adjust"></i> Inverser
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('rotate90')">
+                    <i class="fas fa-redo"></i> Tourner 90°
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('rotate180')">
+                    <i class="fas fa-sync"></i> Tourner 180°
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('mirror')">
+                    <i class="fas fa-exchange-alt"></i> Miroir
+                  </button>
+                  <button class="btn btn-preset" (click)="applyPreset('flip')">
+                    <i class="fas fa-arrows-alt-v"></i> Retourner
+                  </button>
+                </div>
+              </div>
+
+              <!-- Contrôles de transformation détaillés -->
+              <div class="transform-controls">
+                <form [formGroup]="transformForm" class="transform-form">
+                  <div class="transform-grid">
+                    <!-- Rotation -->
+                    <div class="transform-group">
+                      <label for="rotation">
+                        <i class="fas fa-redo"></i>
+                        Rotation
+                      </label>
+                      <div class="slider-container">
+                        <input type="range" 
+                               id="rotation" 
+                               formControlName="rotation"
+                               min="-360" 
+                               max="360" 
+                               step="1"
+                               class="slider">
+                        <span class="slider-value">{{ transformForm.get('rotation')?.value }}°</span>
+                      </div>
+                    </div>
+
+                    <!-- Échelle -->
+                    <div class="transform-group">
+                      <label for="scale">
+                        <i class="fas fa-search-plus"></i>
+                        Échelle
+                      </label>
+                      <div class="slider-container">
+                        <input type="range" 
+                               id="scale" 
+                               formControlName="scale"
+                               min="0.1" 
+                               max="5" 
+                               step="0.1"
+                               class="slider">
+                        <span class="slider-value">×{{ transformForm.get('scale')?.value }}</span>
+                      </div>
+                    </div>
+
+                    <!-- Luminosité -->
+                    <div class="transform-group">
+                      <label for="brightness">
+                        <i class="fas fa-sun"></i>
+                        Luminosité
+                      </label>
+                      <div class="slider-container">
+                        <input type="range" 
+                               id="brightness" 
+                               formControlName="brightness"
+                               min="0" 
+                               max="200" 
+                               step="1"
+                               class="slider">
+                        <span class="slider-value">{{ transformForm.get('brightness')?.value }}%</span>
+                      </div>
+                    </div>
+
+                    <!-- Contraste -->
+                    <div class="transform-group">
+                      <label for="contrast">
+                        <i class="fas fa-adjust"></i>
+                        Contraste
+                      </label>
+                      <div class="slider-container">
+                        <input type="range" 
+                               id="contrast" 
+                               formControlName="contrast"
+                               min="0" 
+                               max="200" 
+                               step="1"
+                               class="slider">
+                        <span class="slider-value">{{ transformForm.get('contrast')?.value }}%</span>
+                      </div>
+                    </div>
+
+                    <!-- Saturation -->
+                    <div class="transform-group">
+                      <label for="saturation">
+                        <i class="fas fa-palette"></i>
+                        Saturation
+                      </label>
+                      <div class="slider-container">
+                        <input type="range" 
+                               id="saturation" 
+                               formControlName="saturation"
+                               min="0" 
+                               max="200" 
+                               step="1"
+                               class="slider">
+                        <span class="slider-value">{{ transformForm.get('saturation')?.value }}%</span>
+                      </div>
+                    </div>
+
+                    <!-- Flou -->
+                    <div class="transform-group">
+                      <label for="blur">
+                        <i class="fas fa-cloud"></i>
+                        Flou
+                      </label>
+                      <div class="slider-container">
+                        <input type="range" 
+                               id="blur" 
+                               formControlName="blur"
+                               min="0" 
+                               max="10" 
+                               step="0.1"
+                               class="slider">
+                        <span class="slider-value">{{ transformForm.get('blur')?.value }}px</span>
+                      </div>
+                    </div>
+
+                    <!-- Netteté -->
+                    <div class="transform-group">
+                      <label for="sharpen">
+                        <i class="fas fa-crosshairs"></i>
+                        Netteté
+                      </label>
+                      <div class="slider-container">
+                        <input type="range" 
+                               id="sharpen" 
+                               formControlName="sharpen"
+                               min="0" 
+                               max="10" 
+                               step="0.1"
+                               class="slider">
+                        <span class="slider-value">{{ transformForm.get('sharpen')?.value }}</span>
+                      </div>
+                    </div>
+
+                    <!-- Options de basculement -->
+                    <div class="transform-options">
+                      <div class="checkbox-group">
+                        <input type="checkbox" 
+                               id="flipHorizontal" 
+                               formControlName="flipHorizontal"
+                               class="checkbox">
+                        <label for="flipHorizontal">
+                          <i class="fas fa-exchange-alt"></i>
+                          Miroir horizontal
+                        </label>
+                      </div>
+                      
+                      <div class="checkbox-group">
+                        <input type="checkbox" 
+                               id="flipVertical" 
+                               formControlName="flipVertical"
+                               class="checkbox">
+                        <label for="flipVertical">
+                          <i class="fas fa-arrows-alt-v"></i>
+                          Miroir vertical
+                        </label>
+                      </div>
+                      
+                      <div class="checkbox-group">
+                        <input type="checkbox" 
+                               id="grayscale" 
+                               formControlName="grayscale"
+                               class="checkbox">
+                        <label for="grayscale">
+                          <i class="fas fa-moon"></i>
+                          Niveaux de gris
+                        </label>
+                      </div>
+                      
+                      <div class="checkbox-group">
+                        <input type="checkbox" 
+                               id="sepia" 
+                               formControlName="sepia"
+                               class="checkbox">
+                        <label for="sepia">
+                          <i class="fas fa-camera-retro"></i>
+                          Sépia
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Bouton de détection pour l'image transformée -->
+            <div *ngIf="transformedImagePreview" class="transform-detection">
+              <h4>
+                <i class="fas fa-robot"></i>
+                Détection sur l'image transformée
+              </h4>
+              <div class="action-buttons">
+                <button class="btn btn-primary btn-detect" 
+                        (click)="detectObjects()"
+                        [disabled]="isProcessing">
+                  <i class="fas fa-search" *ngIf="!isProcessing"></i>
+                  <i class="fas fa-spinner fa-spin" *ngIf="isProcessing"></i>
+                  {{ isProcessing ? 'Analyse en cours...' : 'Détecter sur l\'image transformée' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Carte de paramètres -->
+      <div class="card settings-card" *ngIf="!isTransformMode()">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-cog"></i>
+            Paramètres de détection
+          </h2>
+        </div>
+
+        <div class="card-body">
+          <form [formGroup]="settingsForm" class="settings-form">
+            <!-- Seuil de confiance -->
+            <div class="form-group">
+              <label for="confidence">
+                <i class="fas fa-bullseye"></i>
+                Seuil de confiance
+              </label>
+              <div class="slider-container">
+                <input type="range" 
+                       id="confidence" 
+                       formControlName="confidence"
+                       min="0.1" 
+                       max="0.9" 
+                       step="0.05"
+                       class="slider">
+                <span class="slider-value">{{ settingsForm.get('confidence')?.value }}</span>
+              </div>
+            </div>
+
+            <!-- Seuil IoU -->
+            <div class="form-group">
+              <label for="iou">
+                <i class="fas fa-expand-alt"></i>
+                Seuil IoU
+              </label>
+              <div class="slider-container">
+                <input type="range" 
+                       id="iou" 
+                       formControlName="iou"
+                       min="0.1" 
+                       max="0.9" 
+                       step="0.05"
+                       class="slider">
+                <span class="slider-value">{{ settingsForm.get('iou')?.value }}</span>
+              </div>
+            </div>
+
+            <!-- Taille d'image -->
+            <div class="form-group">
+              <label for="imageSize">
+                <i class="fas fa-expand"></i>
+                Taille d'image
+              </label>
+              <select id="imageSize" formControlName="imageSize" class="form-select">
+                <option value="320">320px</option>
+                <option value="640">640px</option>
+                <option value="1280">1280px</option>
+              </select>
+            </div>
+
+            <!-- Options spécifiques au lot -->
+            <div *ngIf="selectionMode === 'batch'" class="form-group">
+              <div class="checkbox-group">
+                <input type="checkbox" 
+                       id="processSequentially" 
+                       formControlName="processSequentially"
+                       class="checkbox">
+                <label for="processSequentially">
+                  <i class="fas fa-stream"></i>
+                  Traiter séquentiellement (plus lent mais plus stable)
+                </label>
+              </div>
+            </div>
+
+            <!-- Options générales -->
+            <div class="form-group">
+              <div class="checkbox-group">
+                <input type="checkbox" 
+                       id="saveResults" 
+                       formControlName="saveResults"
+                       class="checkbox">
+                <label for="saveResults">
+                  <i class="fas fa-save"></i>
+                  Sauvegarder les résultats
+                </label>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Carte de paramètres pour le mode transformation -->
+      <div class="card settings-card" *ngIf="isTransformMode()">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-cog"></i>
+            Paramètres de détection (pour l'image transformée)
+          </h2>
+        </div>
+
+        <div class="card-body">
+          <form [formGroup]="settingsForm" class="settings-form">
+            <!-- Seuil de confiance -->
+            <div class="form-group">
+              <label for="confidence">
+                <i class="fas fa-bullseye"></i>
+                Seuil de confiance
+              </label>
+              <div class="slider-container">
+                <input type="range" 
+                       id="confidence" 
+                       formControlName="confidence"
+                       min="0.1" 
+                       max="0.9" 
+                       step="0.05"
+                       class="slider">
+                <span class="slider-value">{{ settingsForm.get('confidence')?.value }}</span>
+              </div>
+            </div>
+
+            <!-- Seuil IoU -->
+            <div class="form-group">
+              <label for="iou">
+                <i class="fas fa-expand-alt"></i>
+                Seuil IoU
+              </label>
+              <div class="slider-container">
+                <input type="range" 
+                       id="iou" 
+                       formControlName="iou"
+                       min="0.1" 
+                       max="0.9" 
+                       step="0.05"
+                       class="slider">
+                <span class="slider-value">{{ settingsForm.get('iou')?.value }}</span>
+              </div>
+            </div>
+
+            <!-- Taille d'image -->
+            <div class="form-group">
+              <label for="imageSize">
+                <i class="fas fa-expand"></i>
+                Taille d'image
+              </label>
+              <select id="imageSize" formControlName="imageSize" class="form-select">
+                <option value="320">320px</option>
+                <option value="640">640px</option>
+                <option value="1280">1280px</option>
+              </select>
+            </div>
+
+            <!-- Options générales -->
+            <div class="form-group">
+              <div class="checkbox-group">
+                <input type="checkbox" 
+                       id="saveResults" 
+                       formControlName="saveResults"
+                       class="checkbox">
+                <label for="saveResults">
+                  <i class="fas fa-save"></i>
+                  Sauvegarder les résultats
+                </label>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Carte de progression du lot -->
+      <div *ngIf="isBatchMode() && (isBatchProcessing || hasBatchResults())" class="card batch-card">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-tasks"></i>
+            Progression du lot
+          </h2>
+        </div>
+
+        <div class="card-body">
+          <!-- Barre de progression -->
+          <div *ngIf="isBatchProcessing" class="progress-section">
+            <div class="progress-info">
+              <span class="progress-text">
+                {{ getBatchProgress() }}% ({{ batchStatistics.processedImages }}/{{ batchStatistics.totalImages }})
+              </span>
+              <span class="time-elapsed">
+                <i class="fas fa-clock"></i> {{ getElapsedTime() }}
+              </span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" [style.width]="getBatchProgress() + '%'"></div>
+            </div>
+          </div>
+
+          <!-- Statistiques du lot -->
+          <div class="batch-statistics">
+            <div class="stat-row">
+              <span class="stat-label">Images traitées:</span>
+              <span class="stat-value">{{ batchStatistics.processedImages }}/{{ batchStatistics.totalImages }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Succès:</span>
+              <span class="stat-value success">{{ batchStatistics.successfulDetections }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Échecs:</span>
+              <span class="stat-value error">{{ batchStatistics.failedDetections }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Objets détectés:</span>
+              <span class="stat-value">{{ batchStatistics.totalObjects }}</span>
+            </div>
+          </div>
+
+          <!-- Navigation dans les résultats -->
+          <div *ngIf="hasBatchResults() && !isBatchProcessing" class="batch-navigation">
+            <h4>Navigation dans les résultats:</h4>
+            <div class="navigation-controls">
+              <button class="btn btn-sm btn-nav" 
+                      (click)="navigateBatch('prev')"
+                      [disabled]="currentBatchIndex === 0">
+                <i class="fas fa-chevron-left"></i> Précédent
+              </button>
+              <span class="nav-info">
+                Image {{ currentBatchIndex + 1 }}/{{ batchResults.length }}
+              </span>
+              <button class="btn btn-sm btn-nav" 
+                      (click)="navigateBatch('next')"
+                      [disabled]="currentBatchIndex === batchResults.length - 1">
+                Suivant <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Actions du lot -->
+          <div *ngIf="hasBatchResults() && !isBatchProcessing" class="batch-actions">
+            <button class="btn btn-sm btn-success" (click)="downloadBatchResults()">
+              <i class="fas fa-download"></i>
+              Télécharger les résultats
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section droite : Résultats et visualisation -->
+    <div class="right-column">
+      <!-- Carte de résultats -->
+      <div class="card results-card">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-chart-bar"></i>
+            Résultats de détection
+            <span *ngIf="isBatchMode() && hasBatchResults()" class="batch-indicator">
+              (Lot: {{ currentBatchIndex + 1 }}/{{ batchResults.length }})
+            </span>
+            <span *ngIf="isTransformMode() && isImageTransformed()" class="transform-indicator">
+              <i class="fas fa-magic"></i> Image transformée
+            </span>
+          </h2>
+          
+          <div class="header-actions" *ngIf="detectionResults">
+            <button class="btn btn-sm btn-success" (click)="downloadAnnotatedImage()" [disabled]="!annotatedImagePreview">
+              <i class="fas fa-download"></i>
+              Télécharger
+            </button>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <!-- Messages -->
+          <div *ngIf="errorMessage" class="alert alert-error">
+            <i class="fas fa-exclamation-circle"></i>
+            {{ errorMessage }}
+          </div>
+
+          <div *ngIf="successMessage" class="alert alert-success">
+            <i class="fas fa-check-circle"></i>
+            {{ successMessage }}
+          </div>
+
+          <!-- Aperçu avec détections -->
+          <div *ngIf="getImageToDisplay()" class="image-with-detections">
+            <div class="image-container">
+              <!-- Indicateur d'annotation -->
+              <div *ngIf="isImageAnnotated()" class="annotation-indicator">
+                <span class="badge bg-success">
+                  <i class="fas fa-check-circle"></i> Image annotée
+                </span>
+              </div>
+              
+              <!-- Indicateur de lot -->
+              <div *ngIf="isBatchMode() && hasBatchResults()" class="batch-indicator-top">
+                <span class="badge bg-info">
+                  <i class="fas fa-folder"></i> Image {{ currentBatchIndex + 1 }} du lot
+                </span>
+              </div>
+              
+              <!-- Indicateur de transformation -->
+              <div *ngIf="isTransformMode() && isImageTransformed()" class="transform-indicator-top">
+                <span class="badge bg-warning">
+                  <i class="fas fa-magic"></i> Image transformée
+                </span>
+              </div>
+              
+              <img [src]="getImageToDisplay()" alt="Image analysée" class="detected-image">
+              
+              <!-- Canvas caché -->
+              <canvas #canvasElement class="detection-canvas" style="display: none;"></canvas>
+            </div>
+          </div>
+
+          <!-- Liste des détections -->
+          <div *ngIf="hasDetections()" class="detections-list">
+            <h3>
+              <i class="fas fa-list"></i>
+              Détections ({{ getDetections().length }})
+            </h3>
+            
+            <div class="detection-filters" *ngIf="availableClasses.length > 0">
+              <div class="filter-tags">
+                <span class="filter-tag" 
+                      *ngFor="let cls of availableClasses"
+                      (click)="filterByClass(cls)">
+                  {{ cls }}
+                </span>
+              </div>
+            </div>
+
+            <div class="detections-grid">
+              <div *ngFor="let detection of getDetections()" 
+                   class="detection-item"
+                   [style.border-left-color]="getConfidenceColor(detection.confidence)"
+                   (click)="selectObjectForSearch(detection)"
+                   [class.selected]="selectedObject?.id === detection.id">
+                
+                <div class="detection-header">
+                  <div class="detection-class">
+                    <i class="fas fa-box"></i>
+                    <strong>{{ detection.class_name }}</strong>
+                    <span class="detection-id">#{{ detection.id || detection.class_id }}</span>
+                  </div>
+                  
+                  <div class="detection-confidence" 
+                       [style.color]="getConfidenceColor(detection.confidence)">
+                    {{ formatPercentage(detection.confidence) }}
+                  </div>
+                </div>
+
+                <div class="detection-details">
+                  <div class="detail-row">
+                    <span class="detail-label">Position:</span>
+                    <span class="detail-value">
+                      X: {{ detection.bbox?.x1 | number:'1.0-0' }}, 
+                      Y: {{ detection.bbox?.y1 | number:'1.0-0' }}
+                    </span>
+                  </div>
+                  
+                  <div class="detail-row">
+                    <span class="detail-label">Dimensions:</span>
+                    <span class="detail-value">
+                      {{ detection.bbox?.width | number:'1.0-0' }} × {{ detection.bbox?.height | number:'1.0-0' }} px
+                    </span>
+                  </div>
+                  
+                  <div class="detail-row">
+                    <span class="detail-label">Zone:</span>
+                    <span class="detail-value">
+                      {{ ((detection.bbox?.width || 0) * (detection.bbox?.height || 0)) | number:'1.0-0' }} px²
+                    </span>
+                  </div>
+                </div>
+                
+                <!-- Indicateur de sélection -->
+                <div *ngIf="selectedObject?.id === detection.id" class="selection-indicator">
+                  <i class="fas fa-check"></i> Sélectionné pour la recherche
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Statistiques -->
+          <div *ngIf="hasStatistics()" class="statistics-section">
+            <h3>
+              <i class="fas fa-chart-pie"></i>
+              Statistiques
+            </h3>
+            
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <i class="fas fa-cube"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ getStatistics().total }}</div>
+                  <div class="stat-label">Objets détectés</div>
+                </div>
+              </div>
+              
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <i class="fas fa-percentage"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">{{ formatPercentage(getStatistics().average_confidence) }}</div>
+                  <div class="stat-label">Confiance moyenne</div>
+                </div>
+              </div>
+              
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <i class="fas fa-shapes"></i>
+                </div>
+                <div class="stat-content">
+                  <div class="stat-value">
+                    {{ getUniqueClassesCount() }}
+                  </div>
+                  <div class="stat-label">Classes uniques</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Distribution par classe -->
+            <div class="class-distribution" *ngIf="getObjectKeys(getStatistics().class_distribution).length > 0">
+              <h4>Distribution par classe:</h4>
+              <div class="distribution-list">
+                <div *ngFor="let item of getObjectEntries(getStatistics().class_distribution)" 
+                     class="distribution-item">
+                  <div class="distribution-header">
+                    <span class="class-name">{{ item[0] }}</span>
+                    <span class="class-count">{{ item[1] }}</span>
+                  </div>
+                  <div class="distribution-bar">
+                    <div class="bar-fill" 
+                         [style.width]="getDistributionWidth(item[1])"
+                         [style.background]="getConfidenceColor(0.8)"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Graphique simple -->
+          <div *ngIf="hasChartData()" class="simple-chart-section">
+            <h4>
+              <i class="fas fa-chart-bar"></i>
+              Visualisation des détections
+            </h4>
+            <div class="simple-chart-container">
+              <div *ngFor="let label of getChartData().labels; let i = index" 
+                   class="simple-chart-item">
+                <div class="simple-chart-info">
+                  <span class="simple-chart-label">{{ label }}</span>
+                  <span class="simple-chart-count">{{ getChartData().counts[i] }}</span>
+                </div>
+                <div class="simple-chart-bar">
+                  <div class="simple-chart-bar-fill" 
+                       [style.width]="(getChartData().counts[i] / (getStatistics().total || 1) * 100) + '%'"
+                       [style.background]="getChartData().colors[i]"></div>
+                </div>
+                <div class="simple-chart-percentage">
+                  {{ (getChartData().counts[i] / (getStatistics().total || 1) * 100).toFixed(1) }}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section Actions de Recherche -->
+          <div *ngIf="hasDetections()" class="search-actions">
+            <h3>
+              <i class="fas fa-search"></i>
+              Actions de Recherche
+            </h3>
+            
+            <div class="action-buttons">
+              <button class="btn btn-primary" 
+                      (click)="goToSearchWithSelection()" 
+                      [disabled]="!selectedObject">
+                <i class="fas fa-search"></i>
+                Rechercher avec l'objet sélectionné
+              </button>
+              
+              <button class="btn btn-secondary" 
+                      (click)="navigateToSearchWithResults()">
+                <i class="fas fa-list"></i>
+                Voir tous les objets détectés
+              </button>
+            </div>
+            
+            <!-- Sélection d'objet rapide -->
+            <div class="quick-selection">
+              <h4>Sélectionnez un objet pour la recherche :</h4>
+              <div class="quick-objects">
+                <button *ngFor="let detection of getDetections()" 
+                        class="object-btn" 
+                        [class.selected]="selectedObject?.class_name === detection.class_name"
+                        (click)="selectObjectForSearch(detection)">
+                  {{ detection.class_name }} ({{ formatPercentage(detection.confidence) }})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- État vide -->
+          <div *ngIf="detectionResults && !hasDetections()" class="empty-state">
+            <i class="fas fa-search fa-3x"></i>
+            <h3>Aucun objet détecté</h3>
+            <p>Aucun objet n'a été détecté dans cette image avec les paramètres actuels.</p>
+            <p>Essayez de réduire le seuil de confiance ou chargez une autre image.</p>
+          </div>
+
+          <!-- État initial -->
+          <div *ngIf="!detectionResults && !originalImagePreview" class="empty-state initial-state">
+            <i class="fas fa-image fa-3x"></i>
+            <h3>En attente d'analyse</h3>
+            <p>Chargez une image ou un dossier d'images et cliquez sur "Détecter les objets" pour commencer l'analyse.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,494 @@
+<div class="search-page">
+  <!-- En-tête amélioré -->
+  <div class="page-header">
+    <div class="header-container">
+      <div class="header-content">
+        <div class="header-icon">
+          <i class="fas fa-search fa-2x"></i>
+        </div>
+        <div class="header-text">
+          <h1>Recherche d'Objets Similaires</h1>
+          <p class="subtitle">Trouvez des objets similaires dans votre base de données</p>
+        </div>
+      </div>
+      
+      <div class="header-status">
+        <div class="status-indicator" [ngClass]="systemReady ? 'online' : 'offline'">
+          <div class="status-dot"></div>
+          <span>{{ systemReady ? 'Système prêt' : 'En attente...' }}</span>
+        </div>
+        
+        <div class="database-info" *ngIf="databaseInfo">
+          <div class="info-item">
+            <i class="fas fa-database"></i>
+            <span>{{ databaseInfo.statistics?.total_objects || 0 }} objets</span>
+          </div>
+          <div class="info-item">
+            <i class="fas fa-images"></i>
+            <span>{{ databaseInfo.statistics?.total_images || 0 }} images</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-content">
+    <!-- Section gauche : Configuration -->
+    <div class="left-column">
+      <!-- Carte d'image source -->
+      <div class="card source-card">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-image"></i>
+            Image source
+          </h2>
+          <span class="badge" *ngIf="hasDetections()">
+            {{ getTotalDetections() }} objets
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="image-container" (click)="onCanvasClick($event)">
+            <!-- Image annotée -->
+            <img *ngIf="isImageAnnotated" 
+                 [src]="detectedImage" 
+                 alt="Image annotée" 
+                 class="source-image annotated">
+            
+            <!-- Canvas pour détections -->
+            <canvas *ngIf="!isImageAnnotated && hasDetections()" 
+                    #detectedImageCanvas 
+                    class="source-canvas"></canvas>
+                    
+            <!-- Image simple -->
+            <img *ngIf="!isImageAnnotated && !hasDetections()" 
+                 [src]="detectedImage" 
+                 alt="Image" 
+                 class="source-image">
+            
+            <!-- Indicateur d'état -->
+            <div class="image-indicator">
+              <span class="badge" [ngClass]="isImageAnnotated ? 'badge-success' : 'badge-info'">
+                <i class="fas" [class.fa-check-circle]="isImageAnnotated" 
+                               [class.fa-mouse-pointer]="!isImageAnnotated"></i>
+                {{ isImageAnnotated ? 'Annotée' : 'Sélectionnez un objet' }}
+              </span>
+            </div>
+          </div>
+          
+          <div class="image-meta">
+            <h5>{{ detectedImageName }}</h5>
+            <div class="image-actions" *ngIf="hasDetections() && !isImageAnnotated">
+              <button class="btn btn-action btn-sm" 
+                      (click)="redrawDetections()"
+                      title="Redessiner les détections">
+                <i class="fas fa-redo"></i>
+              </button>
+              <button class="btn btn-action btn-sm" 
+                      (click)="showOriginalImage()"
+                      title="Afficher l'image originale">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Carte de configuration -->
+      <div class="card config-card">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-sliders-h"></i>
+            Configuration
+          </h2>
+        </div>
+        <div class="card-body">
+          <!-- Sélection d'objet -->
+          <div class="form-section" *ngIf="objectClasses.length > 0">
+            <label class="form-label">
+              <i class="fas fa-object-group"></i>
+              Objet à rechercher
+            </label>
+            <div class="search-input">
+              <i class="fas fa-search"></i>
+              <select [(ngModel)]="selectedClassName" 
+                      (change)="onClassChange()" 
+                      class="form-select">
+                <option value="">Choisir une classe...</option>
+                <option *ngFor="let className of objectClasses" [value]="className">
+                  {{ className }} ({{ getClassCount(className) }})
+                </option>
+              </select>
+            </div>
+            <div class="selected-info" *ngIf="selectedDetection">
+              <div class="selected-badge">
+                <i class="fas fa-check"></i>
+                {{ selectedDetection.class_name }}
+                <span class="confidence">{{ formatPercentage(selectedDetection.confidence) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Paramètres de recherche -->
+          <div class="form-section">
+            <label class="form-label">
+              <i class="fas fa-filter"></i>
+              Paramètres de recherche
+            </label>
+            
+            <!-- Nombre de résultats -->
+            <div class="setting-item">
+              <div class="setting-label">
+                <span>Résultats par page</span>
+                <span class="setting-value">{{ resultsPerPage }}</span>
+              </div>
+              <input type="range" 
+                     [(ngModel)]="resultsPerPage"
+                     min="1" 
+                     max="50" 
+                     step="1"
+                     class="form-range">
+            </div>
+
+            <!-- Seuil de similarité -->
+            <div class="setting-item">
+              <div class="setting-label">
+                <span>Seuil de similarité</span>
+                <span class="setting-value">{{ threshold }}</span>
+              </div>
+              <input type="range" 
+                     [(ngModel)]="threshold"
+                     min="0" 
+                     max="1" 
+                     step="0.1"
+                     class="form-range">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Carte des objets détectés -->
+      <div class="card objects-card" *ngIf="hasDetections()">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-cubes"></i>
+            Objets détectés
+          </h2>
+          <div class="card-actions">
+            <button class="btn btn-sm btn-outline" (click)="showAllObjects()">
+              Voir tout
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="objects-grid">
+            <div *ngFor="let detection of detectionsFromDetection" 
+                 class="object-item" 
+                 [class.selected]="detection === selectedDetection"
+                 (click)="selectDetection(detection)"
+                 [title]="'Cliquez pour rechercher ' + detection.class_name">
+              <div class="object-visual">
+                <div class="object-color" [style.background]="getClassColor(detection.class_name)"></div>
+                <i class="fas fa-cube"></i>
+              </div>
+              <div class="object-info">
+                <div class="object-name">{{ detection.class_name }}</div>
+                <div class="object-confidence">
+                  <span class="confidence-value">{{ formatPercentage(detection.confidence) }}</span>
+                  <div class="confidence-bar">
+                    <div class="bar-fill" [style.width]="detection.confidence * 100 + '%'"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="object-size">
+                {{ detection.bbox?.width?.toFixed(0) || 0 }}×{{ detection.bbox?.height?.toFixed(0) || 0 }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section droite : Recherche -->
+    <div class="right-column">
+      <!-- Carte de contrôle de recherche -->
+      <div class="card control-card">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-rocket"></i>
+            Contrôle de recherche
+          </h2>
+        </div>
+        <div class="card-body">
+          <!-- Messages d'état -->
+          <div class="status-messages">
+            <div *ngIf="searchMessage" class="status-message" 
+                 [class.info]="!isSearching && !searchPerformed" 
+                 [class.warning]="isSearching"
+                 [class.success]="searchPerformed && !isSearching && searchResults.length > 0"
+                 [class.error]="searchPerformed && !isSearching && searchResults.length === 0">
+              <div class="message-icon">
+                <i class="fas" 
+                   [class.fa-info-circle]="!isSearching && !searchPerformed" 
+                   [class.fa-spinner]="isSearching"
+                   [class.fa-spin]="isSearching"
+                   [class.fa-check-circle]="searchPerformed && !isSearching && searchResults.length > 0"
+                   [class.fa-exclamation-circle]="searchPerformed && !isSearching && searchResults.length === 0"></i>
+              </div>
+              <div class="message-text">
+                {{ searchMessage }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Bouton de recherche principal -->
+          <div class="search-controls">
+            <button class="btn btn-primary btn-search" 
+                    (click)="launchDescriptorSearch()" 
+                    [disabled]="!selectedDetection || isSearching || !systemReady">
+              <div class="btn-content">
+                <i class="fas fa-search" *ngIf="!isSearching"></i>
+                <i class="fas fa-spinner fa-spin" *ngIf="isSearching"></i>
+                <span>{{ isSearching ? 'Recherche en cours...' : 'Lancer la recherche' }}</span>
+              </div>
+              <div class="btn-badge" *ngIf="selectedDetection">
+                <i class="fas fa-object-group"></i>
+                {{ selectedDetection.class_name }}
+              </div>
+            </button>
+          </div>
+
+          <!-- Actions rapides -->
+          <div class="quick-actions">
+            <div class="action-buttons">
+              <button class="btn btn-action" 
+                      (click)="clear()"
+                      [disabled]="!hasSearchResults()">
+                <i class="fas fa-trash"></i>
+                Effacer
+              </button>
+              
+              <button class="btn btn-action" 
+                      (click)="downloadResults()"
+                      [disabled]="!currentSearchResponse">
+                <i class="fas fa-download"></i>
+                Exporter
+              </button>
+              
+              <button class="btn btn-action" 
+                      (click)="showQueryAnnotatedImage()"
+                      [disabled]="!currentSearchResponse?.annotated_image">
+                <i class="fas fa-eye"></i>
+                Annotations
+              </button>
+              
+              <button class="btn btn-action" (click)="goToDetection()">
+                <i class="fas fa-arrow-left"></i>
+                Retour
+              </button>
+            </div>
+          </div>
+
+          <!-- Informations de recherche -->
+          <div class="search-info" *ngIf="currentSearchResponse">
+            <div class="info-grid">
+              <div class="info-item">
+                <i class="fas fa-clock"></i>
+                <span>Temps: {{ currentSearchResponse.data?.processing_time || 0 }}s</span>
+              </div>
+              <div class="info-item">
+                <i class="fas fa-method"></i>
+                <span>Méthode: {{ getMethodName(selectedMethod) }}</span>
+              </div>
+              <div class="info-item">
+                <i class="fas fa-database"></i>
+                <span>Source: {{ currentSearchResponse.data?.search_source || 'descripteurs' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Carte des résultats -->
+      <div class="card results-card" *ngIf="hasSearchResults()">
+        <div class="card-header">
+          <h2>
+            <i class="fas fa-chart-bar"></i>
+            Résultats
+            <span class="results-count">{{ filteredResults.length }}</span>
+          </h2>
+          <div class="card-actions">
+            <div class="view-controls">
+              <button class="btn btn-view" [class.active]="viewMode === 'grid'" (click)="viewMode = 'grid'">
+                <i class="fas fa-th"></i>
+              </button>
+              <button class="btn btn-view" [class.active]="viewMode === 'list'" (click)="viewMode = 'list'">
+                <i class="fas fa-list"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <!-- Aucun résultat -->
+          <div *ngIf="filteredResults.length === 0" class="empty-state">
+            <div class="empty-icon">
+              <i class="fas fa-search fa-3x"></i>
+            </div>
+            <h3>Aucun résultat trouvé</h3>
+            <p>Essayez de réduire le seuil de similarité ou sélectionnez un autre objet.</p>
+            <button class="btn btn-outline" (click)="adjustSearch()">
+              <i class="fas fa-adjust"></i>
+              Ajuster la recherche
+            </button>
+          </div>
+
+          <!-- Grille de résultats -->
+          <div *ngIf="filteredResults.length > 0 && viewMode === 'grid'" class="results-grid" [class.loading]="imagesLoading">
+            <div *ngFor="let result of paginatedResults; let i = index; trackBy: trackById" 
+                 class="result-card"
+                 [style.animation-delay]="i * 0.05 + 's'">
+              
+              <div class="result-image">
+                <!-- Conteneur de chargement -->
+                <div class="image-loading" *ngIf="result._loading">
+                  <div class="loading-spinner"></div>
+                </div>
+                
+                <!-- Dans le template HTML, modifier l'affichage des images -->
+                <img [src]="getAnnotatedImageUrl(result)" 
+                    [alt]="getImageName(result)"
+                    class="result-img"
+                    (error)="handleImageError($event, result)"
+                    (load)="onImageLoaded(result)"
+                    [style.opacity]="result._loading ? '0' : '1'"
+                    [style.transition]="'opacity 0.3s ease'"
+                    loading="lazy"> <!-- Ajouter lazy loading -->
+                
+                <div class="result-overlay">
+                  <div class="similarity-badge" [style.background]="getSimilarityColor(result.similarity)">
+                    {{ formatSimilarityScore(result.similarity) }}
+                  </div>
+                </div>
+              </div>
+              
+              <div class="result-content">
+                <h6 class="result-title">{{ getImageName(result) }}</h6>
+                <div class="result-meta">
+                  <div class="meta-item">
+                    <i class="fas fa-percentage"></i>
+                    <span>Similarité: {{ formatSimilarityScore(result.similarity) }}</span>
+                  </div>
+                  <div class="meta-item" *ngIf="result.distance">
+                    <i class="fas fa-ruler"></i>
+                    <span>Distance: {{ result.distance.toFixed(2) }}</span>
+                  </div>
+                </div>
+                <div class="result-actions">
+                  <button class="btn btn-sm btn-outline" (click)="openResultDetails(result)">
+                    <i class="fas fa-info-circle"></i>
+                    Détails
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Liste de résultats -->
+          <div *ngIf="filteredResults.length > 0 && viewMode === 'list'" class="results-list" [class.loading]="imagesLoading">
+            <div *ngFor="let result of paginatedResults; let i = index; trackBy: trackById" 
+                 class="result-row"
+                 [style.animation-delay]="i * 0.05 + 's'">
+              
+              <div class="row-image">
+                <!-- Conteneur de chargement -->
+                <div class="image-loading-small" *ngIf="result._loading">
+                  <div class="loading-spinner-small"></div>
+                </div>
+                
+                <img [src]="getAnnotatedImageUrl(result)" 
+                     [alt]="getImageName(result)"
+                     class="list-img"
+                     (load)="onImageLoaded(result)"
+                     (error)="handleImageError($event, result)"
+                     [style.opacity]="result._loading ? '0' : '1'"
+                     [style.transition]="'opacity 0.3s ease'">
+              </div>
+              
+              <div class="row-content">
+                <div class="row-title">{{ getImageName(result) }}</div>
+                <div class="row-progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" [style.width]="result.similarity * 100 + '%'"></div>
+                  </div>
+                  <span class="progress-value">{{ formatSimilarityScore(result.similarity) }}</span>
+                </div>
+                <div class="row-meta">
+                  <span class="meta-tag">{{ getMethodName(selectedMethod) }}</span>
+                  <span class="meta-tag" *ngIf="result.image_id">ID: {{ result.image_id | slice:0:8 }}...</span>
+                </div>
+              </div>
+              <div class="row-actions">
+                <button class="btn btn-icon" (click)="openResultDetails(result)">
+                  <i class="fas fa-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pagination -->
+          <div *ngIf="filteredResults.length > 0" class="results-pagination">
+            <div class="pagination-info">
+              Affichage {{ getDisplayRange() }}
+            </div>
+            <div class="pagination-controls">
+              <button class="btn btn-pagination" 
+                      [disabled]="currentPage === 1"
+                      (click)="previousPage()">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <span class="page-info">Page {{ currentPage }}</span>
+              <!-- Nouveau code -->
+<button class="btn btn-pagination" 
+        [disabled]="currentPage >= getTotalPages()"
+        (click)="nextPage()">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal image annotée -->
+  <div class="modal-overlay" *ngIf="showQueryAnnotatedModal" (click)="closeQueryAnnotatedModal()"></div>
+  <div class="modal-container" *ngIf="showQueryAnnotatedModal" [class.active]="showQueryAnnotatedModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>
+          <i class="fas fa-image"></i>
+          Image de requête annotée
+        </h3>
+        <button class="btn btn-close" (click)="closeQueryAnnotatedModal()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <img [src]="queryAnnotatedImage" 
+             alt="Image annotée de la requête" 
+             class="modal-image">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeQueryAnnotatedModal()">
+          Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>© 2024 Système d'analyse d'images - Tous droits réservés</p>
+    <p class="version">Version 1.0.0</p>
+  </div>
+</div>
