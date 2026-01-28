@@ -382,18 +382,3 @@ Le système est évalué avec les métriques standard :
 
 ---
 
-## 📄 Licence
-
-Ce projet est développé dans un cadre académique. Pour toute utilisation commerciale, veuillez contacter les auteurs.
-
-## 👥 Contributeurs
-
-Projet développé dans le cadre d'un travail de recherche sur la valorisation du patrimoine culturel numérique.
-
-## 📧 Contact
-
-Pour toute question ou suggestion d'amélioration, n'hésitez pas à ouvrir une issue sur le repository.
-
----
-
-**Note :** Ce README est basé sur le rapport technique complet du projet. Pour plus de détails sur les aspects théoriques et mathématiques, référez-vous au document de rapport.
